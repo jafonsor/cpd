@@ -6,3 +6,6 @@
 *~
 out
 serial
+*opari*
+*.mod.*
+omp-test

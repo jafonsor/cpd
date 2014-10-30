@@ -5,6 +5,81 @@
 #include <time.h>
 #include <math.h>
 
+// square
+typedef struct square {
+	int tabX;
+	int tabY;
+	int x_min;
+	int x_max;
+	int y_min;
+	int y_max;
+} Square;
+
+void cell_limits(int tab_coord, int max_mat_coord, int max_tab_coord, int  *coord_min, int *coord_max) {
+	int remainder = max_mat_coord % max_tab_coord;
+	int  n_mat_coords_per_cell = max_mat_coord / max_tab_coord;
+	*coord_min = n_mat_coords_per_cell * tab_coord;
+	*coord_max = (*coord_min) + n_mat_coords_per_cell;
+	if(tab_coord == max_tab_coord - 1) {
+		*coord_max += remainder;
+	}
+}
+
+Square * new_square(int x, int y, int matx_max, int maty_max, int tabx_max, int taby_max) {
+	Square * new_square = (Square*)malloc(sizeof(Square));
+	new_square->tabX = x;
+	new_square->tabY = y;
+	cell_limits(x,matx_max, tabx_max, &new_square->x_min, &new_square->x_max);
+	cell_limits(y,maty_max, taby_max, &new_square->y_min, &new_square->y_max);
+	return new_square;
+}
+
+// stack
+typedef struct stack {
+	Square ** squares;
+	int max_size;
+	int cursor;
+	int current_size;
+} Stack;
+
+Stack * new_stack(int max_size) {
+	Stack * result = (Stack*)malloc(sizeof(Stack));
+	result->max_size = max_size;
+	result->cursor = 0;
+	result->current_size = 0;
+	result->squares = (Square**)malloc(sizeof(Square*)*max_size);
+}
+
+void delete_stack(Stack * stack) {
+	free(stack->squares);
+	free(stack);
+}
+
+void push(Stack * stack, Square * elem) {
+	if(stack->current_size == stack->max_size)
+		printf("stack size exceeded\n");
+	int cursor = stack->cursor;
+	stack->squares[cursor] = elem;
+	stack->cursor = (cursor + 1) % stack->max_size;
+	stack->current_size++;
+}
+
+Square * pop(Stack * stack) {
+	if(stack->current_size == 0)
+		printf("pop with no elements on stack\n");
+	stack->cursor = (stack->cursor - 1) % stack->max_size;
+	stack->current_size--;
+	return stack->squares[stack->cursor];
+}
+
+int empty(Stack * stack) {
+	return !stack->current_size;
+}
+
+
+
+
+
 char * Y;
 
 int ** allocArray(int xdim, int ydim) {
@@ -32,56 +107,37 @@ int max(int a, int b){
 	return (a > b)? a : b;
 }
 
-void cell_limits(int tab_coord, int max_mat_coord, int n_processors, int  *coord_min, int *coord_max) {
-	int remainder = max_mat_coord % n_processors;
-	int  n_mat_coords_per_cell = max_mat_coord / n_processors;
-	*coord_min = n_mat_coords_per_cell * tab_coord;
-	*coord_max = (*coord_min) + n_mat_coords_per_cell;
-	if(tab_coord == n_processors - 1) {
-		*coord_max += remainder;
-	}
+int min(int a, int b){
+	return (a < b)? a : b;
 }
 
-typedef struct square {
-	int tabX;
-	int tabY;
-	int x_min;
-	int x_max;
-	int y_min;
-	int y_max;
-} Square;
 
-Square * new_square(int x, int y, int matx_max, int maty_max, int n_processors) {
-	Square * new_square = (Square*)malloc(sizeof(Square));
-	new_square->tabX = x;
-	new_square->tabY = y;
-	cell_limits(x,matx_max, n_processors, &new_square->x_min, &new_square->x_max);
-	cell_limits(y,maty_max, n_processors, &new_square->y_min, &new_square->y_max);
-	return new_square;
-}
 
-Square * squareWith2(int **table, int tabx_max, int taby_max, int matx_max, int maty_max  ,int n_processors ) {
-	int x,y;
-	for(x = 0; x < tabx_max; x++) {
-		for(y = 0; y < taby_max; y++) {
-			if(table[x][y] == 2) {
-				return new_square(x, y, matx_max, maty_max, n_processors);
+
+
+Square * squareWith2(int iniX, int iniY, int **table, int tabx_max, int taby_max, int matx_max, int maty_max) {
+	int diagonal, i, j;
+	for(diagonal = iniX+iniY; diagonal < tabx_max + taby_max - 1; diagonal++)
+		for( i = max(0, diagonal - tabx_max + 1); i < min(diagonal+1, taby_max); i++)
+		{
+			int c = i;
+			int l = diagonal - i;
+			if(table[l][c] == 2) {
+				return new_square(l, c, matx_max, maty_max, tabx_max, taby_max);
 			}
 		}
-	}
 	return NULL;
 }
 
 int notFinishedTab(int **table, int tabx_max, int taby_max) {
 	int i,j;
-	int number_of_3s = 0;
 	for(i = 0; i < tabx_max; i++) {
 		for(j = 0; j < taby_max; j++) {
-			if(table[i][j] == 3)
-				number_of_3s++;
+			if(table[i][j] != 3)
+				return 1;
 		}
 	}
-	return (number_of_3s != tabx_max * taby_max)? 1 : 0;
+	return 0;
 }
 
 
@@ -118,9 +174,9 @@ InputInfo * readInput(char * fileName) {
 		inputInfo->X = (char*)malloc((inputInfo->size_x+1)*sizeof(char));
 		inputInfo->Y = (char*)malloc((inputInfo->size_y+1)*sizeof(char)); 
 	
-		while((fscanf(file,"%s%s",inputInfo->X,inputInfo->Y)) != EOF){
+		while((fscanf(file,"%s%s",inputInfo->X,inputInfo->Y)) != EOF) {
 
-		}                              
+		}
 		fclose(file);
 	} else {
 		printf("cannot open file: %s", fileName);
@@ -183,72 +239,86 @@ int main(int argc, char **argv) {
 	int maty_max = inputInfo->size_y;
 
 	int i,j;
-	// // check cell_limits func
+
+	Y = inputInfo->Y;
+
+	int **table;
+	int tabx_max, taby_max;
+	int **matrix = allocArray(matx_max, maty_max);
+
+	tabx_max = matx_max / 150;
+	taby_max = maty_max / 150;
+
+	// check cell limits
+	// //cell_limits(int tab_coord, int max_mat_coord, int max_tab_coord, int  *coord_min, int *coord_max)
 	// int min, max;
-	// for(i = 0; i < n_processors; i++) {
-	// 	cell_limits(i, inputInfo->size_x, n_processors, &min, &max);
+	// for(i = 0; i < tabx_max; i++) {
+	// 	cell_limits(i, inputInfo->size_x, tabx_max, &min, &max);
 	// 	printf("%d-%d ", min, max);
 	// }
 	// printf("\n");
-	// for(i = 0; i < n_processors; i++) {
-	// 	cell_limits(i, inputInfo->size_y, n_processors, &min, &max);
+	// for(i = 0; i < taby_max; i++) {
+	// 	cell_limits(i, inputInfo->size_y, taby_max, &min, &max);
 	// 	printf("%d-%d ", min, max);
 	// }
 
-	Y = inputInfo->Y;
-	int **matrix = allocArray(matx_max, maty_max);
+	table = allocArray(tabx_max, taby_max);
 
+	for(i = 0; i < tabx_max; i++) {
+		for(j = 0; j < taby_max; j++) {
+			if(i==0 && j==0)
+				table[i][j] = 2;
+			else if(i==0 || j==0)
+				table[i][j] = 1;
+			else
+				table[i][j] = 0;
+		}
+	}
 
+	Stack * stack = new_stack(max(tabx_max, taby_max));
+	push(stack, new_square(0, 0, matx_max, maty_max, tabx_max, taby_max));
 
 	// fill matrix
 	Square * square = NULL;
 	int x,y;
 	int n_processors;
-	int **table;
-	int tabx_max, taby_max;
-	int notFinished = 0; // false
+	int notFinished = 1; // false
 	int tid;
+	int parallel_counter = 0;
+	int last_tx, last_ty = 0;
 
-#pragma omp parallel private(square, x, y, notFinished, tid)
+#pragma omp parallel private(square, x, y, notFinished, tid, last_tx, last_ty)
 {	
 	tid = omp_get_thread_num();
-	#pragma omp master
-	{
-		n_processors = omp_get_num_threads();
-		//printf("num threads: %d\n", n_processors);
-		tabx_max = n_processors;
-		taby_max = n_processors;
-
-		table = allocArray(tabx_max, taby_max);
-
-		for(i = 0; i < tabx_max; i++) {
-			for(j = 0; j < taby_max; j++) {
-				if(i==0 && j==0)
-					table[i][j] = 2;
-				else if(i==0 || j==0)
-					table[i][j] = 1;
-				else
-					table[i][j] = 0;
-			}
-		}
-	}
-
-	// wait for master
-	#pragma omp barrier
-
+	notFinished = 1;
 	while(notFinished) {
 		square = NULL;
+		last_tx = 0;
+		last_ty = 0;
 		while(square == NULL && notFinished) {
 			#pragma omp critical
-			{
-				square = squareWith2(table, tabx_max, taby_max, matx_max, maty_max, n_processors);
-				if(square!=NULL)
-					table[square->tabX][square->tabY]++;
-				else
-					notFinished = notFinishedTab(table, tabx_max, taby_max);
-			}
-		}
+			{					
+				//square = squareWith2(last_tx, last_ty, table, tabx_max, taby_max, matx_max, maty_max);
+				//last_tx = 0;
+				//last_ty = 0;
+				if(!empty(stack)) {
+					square = pop(stack);
 
+
+					//printf("%d -> [%d][%d]\n", tid, square->tabX, square->tabY );
+					table[square->tabX][square->tabY]++;
+					parallel_counter++;
+				}
+			}
+			if(square == NULL)
+				notFinished = notFinishedTab(table, tabx_max, taby_max);
+		}
+		
+		if(!notFinished)
+			break;
+
+		last_tx = square->tabX;
+		last_ty = square->tabY;
 		for(x = square->x_min; x < square->x_max; x++) {
 			for(y = square->y_min; y < square->y_max; y++) {
 				calc(x,y, matrix, inputInfo->X, inputInfo->Y);
@@ -257,17 +327,28 @@ int main(int argc, char **argv) {
 
 		#pragma omp critical
 		{
+			//printf("%d - f\n", tid);
+			parallel_counter--;
 			if(square->tabX + 1 < tabx_max) {
 				table[square->tabX + 1][square->tabY]++;
+				if(table[square->tabX + 1][square->tabY] == 2) {
+					push(stack, new_square(square->tabX + 1, square->tabY, matx_max, maty_max, tabx_max, taby_max));
+				}
 			}
 			if(square->tabY +1 < taby_max) {
 				table[square->tabX][square->tabY + 1]++;
+				if(table[square->tabX][square->tabY + 1] == 2) {
+					push(stack, new_square(square->tabX, square->tabY + 1, matx_max, maty_max, tabx_max, taby_max));
+				}
 			}
 			//printf("%d\n", tid );
 			//print(table, tabx_max, taby_max);
-			notFinished = notFinishedTab(table, tabx_max, taby_max);
+			//printf("%d - %d\n", tid, parallel_counter);
+			//print(table, tabx_max, taby_max);
 		}
+
 		free(square);
+		notFinished = notFinishedTab(table, tabx_max, taby_max);
 
 		
 		//print(table, tabx_max, taby_max);
