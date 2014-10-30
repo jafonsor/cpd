@@ -3,6 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <time.h>
+#include <math.h>
 
 char * Y;
 
@@ -128,11 +129,20 @@ InputInfo * readInput(char * fileName) {
 	return inputInfo;
 }
 
+short cost(int x) {
+	int i, n_iter = 20;
+	double dcost = 0;
+	for(i = 0; i < n_iter; i++)
+	dcost += pow(sin((double) x),2) + pow(cos((double) x),2);
+	return (short) (dcost / n_iter + 0.1);
+}
+
+
 void calc(int x, int y, int **matrix, char * X, char * Y) {
 	if (x == 0 || y == 0)
 		matrix[x][y] = 0;    
 	else if (X[x-1] == Y[y-1])
-		matrix[x][y] = matrix[x-1][y-1] + 1;
+		matrix[x][y] = matrix[x-1][y-1] + cost(y);
 	else
 		matrix[x][y] = max(matrix[x-1][y], matrix[x][y-1]);
 }
@@ -159,7 +169,6 @@ char * lcs(int **matrix, char * X, char * Y, int matx_max, int maty_max) {
 
 int main(int argc, char **argv) {
 
-	int n_processors = 4;
 	char * lcs_result = NULL;
 	InputInfo * inputInfo = NULL;
 	
@@ -173,7 +182,7 @@ int main(int argc, char **argv) {
 	int matx_max = inputInfo->size_x;
 	int maty_max = inputInfo->size_y;
 
-	int i;
+	int i,j;
 	// // check cell_limits func
 	// int min, max;
 	// for(i = 0; i < n_processors; i++) {
@@ -189,49 +198,75 @@ int main(int argc, char **argv) {
 	Y = inputInfo->Y;
 	int **matrix = allocArray(matx_max, maty_max);
 
-	int tabx_max = n_processors;
-	int taby_max = n_processors;
 
-	int **table = allocArray(tabx_max, taby_max);
-
-	int j;
-	for(i = 0; i < tabx_max; i++) {
-		for(j = 0; j < taby_max; j++) {
-			if(i==0 && j==0)
-				table[i][j] = 2;
-			else if(i==0 || j==0)
-				table[i][j] = 1;
-			else
-				table[i][j] = 0;
-		}
-	}
 
 	// fill matrix
 	Square * square = NULL;
 	int x,y;
-	while(notFinishedTab(table, tabx_max, taby_max)) {
-		square = NULL;
-		while(square == NULL) {
-			//lock A {
-				square = squareWith2(table, tabx_max, taby_max, matx_max, maty_max, n_processors);
-			//}
+	int n_processors;
+	int **table;
+	int tabx_max, taby_max;
+	int notFinished = 0; // false
+	int tid;
+
+#pragma omp parallel private(square, x, y, notFinished, tid)
+{	
+	tid = omp_get_thread_num();
+	#pragma omp master
+	{
+		n_processors = omp_get_num_threads();
+		//printf("num threads: %d\n", n_processors);
+		tabx_max = n_processors;
+		taby_max = n_processors;
+
+		table = allocArray(tabx_max, taby_max);
+
+		for(i = 0; i < tabx_max; i++) {
+			for(j = 0; j < taby_max; j++) {
+				if(i==0 && j==0)
+					table[i][j] = 2;
+				else if(i==0 || j==0)
+					table[i][j] = 1;
+				else
+					table[i][j] = 0;
+			}
 		}
-		//lock A {
-			table[square->tabX][square->tabY]++;
-		//}
+	}
+
+	// wait for master
+	#pragma omp barrier
+
+	while(notFinished) {
+		square = NULL;
+		while(square == NULL && notFinished) {
+			#pragma omp critical
+			{
+				square = squareWith2(table, tabx_max, taby_max, matx_max, maty_max, n_processors);
+				if(square!=NULL)
+					table[square->tabX][square->tabY]++;
+				else
+					notFinished = notFinishedTab(table, tabx_max, taby_max);
+			}
+		}
+
 		for(x = square->x_min; x < square->x_max; x++) {
 			for(y = square->y_min; y < square->y_max; y++) {
 				calc(x,y, matrix, inputInfo->X, inputInfo->Y);
 			}
 		}
-		//lock A {
+
+		#pragma omp critical
+		{
 			if(square->tabX + 1 < tabx_max) {
 				table[square->tabX + 1][square->tabY]++;
 			}
 			if(square->tabY +1 < taby_max) {
 				table[square->tabX][square->tabY + 1]++;
 			}
-		//}
+			//printf("%d\n", tid );
+			//print(table, tabx_max, taby_max);
+			notFinished = notFinishedTab(table, tabx_max, taby_max);
+		}
 		free(square);
 
 		
@@ -239,9 +274,9 @@ int main(int argc, char **argv) {
 		// print(matrix, matx_max, maty_max);
 		//printf("\n");
 	}
-
+}
 	// calc lcs
-
+	
 	//print(matrix, matx_max, maty_max);
 	lcs_result = lcs(matrix, inputInfo->X, inputInfo->Y, matx_max, maty_max);
 	//printf("%d  %d\n", matx_max, maty_max);
