@@ -2,7 +2,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-#include <time.h> 
+#include <time.h>
+
+char * Y;
 
 int ** allocArray(int xdim, int ydim) {
 	int **array = (int**)malloc(sizeof(int*)*xdim);
@@ -112,8 +114,8 @@ InputInfo * readInput(char * fileName) {
 		fscanf(file,"%d %d", &inputInfo->size_x, &inputInfo->size_y);
 		inputInfo->size_x++;
 		inputInfo->size_y++;
-		inputInfo->X = (char*)malloc(inputInfo->size_x*sizeof(char));
-		inputInfo->Y = (char*)malloc(inputInfo->size_x*sizeof(char)); 
+		inputInfo->X = (char*)malloc((inputInfo->size_x+1)*sizeof(char));
+		inputInfo->Y = (char*)malloc((inputInfo->size_y+1)*sizeof(char)); 
 	
 		while((fscanf(file,"%s%s",inputInfo->X,inputInfo->Y)) != EOF){
 
@@ -129,31 +131,30 @@ InputInfo * readInput(char * fileName) {
 void calc(int x, int y, int **matrix, char * X, char * Y) {
 	if (x == 0 || y == 0)
 		matrix[x][y] = 0;    
-	else if ((x>0 && y>0)&&(X[x-1] == Y[y-1]))
-		matrix[x][y] = matrix[x-1][y-1] + 1;    
-	else if ((x>0 && y>0)&&(matrix[x-1][y] != matrix[x][y-1]))
-		matrix[x][y] = max(matrix[x-1][y], matrix[x][y-1]);	  
+	else if (X[x-1] == Y[y-1])
+		matrix[x][y] = matrix[x-1][y-1] + 1;
 	else
-		matrix[x][y] = matrix[x][y-1]; 
+		matrix[x][y] = max(matrix[x-1][y], matrix[x][y-1]);
 }
 
 char * lcs(int **matrix, char * X, char * Y, int matx_max, int maty_max) {
-	char * lcs = (char*)malloc(max(matx_max,maty_max) * sizeof(char));
-	int k = matx_max - 1; 
-	int p = maty_max - 1;
-	int l = 0;
-	while (k>0 && p>0){
-		if (X[k-1] == Y[p-1]){
-			lcs[l] = X[k-1];  //
-			k--; p--; l++;		 		                
-		} else if(matrix[k-1][p] >= matrix[k][p-1]) 
-			k--;
-		else 
-			p--;
-   }
-   lcs[l] = '\0';
-   reverse(lcs);
-   return lcs;
+	int lcs_len = matrix[matx_max-1][maty_max-1];
+	char * lcs = (char*)malloc((lcs_len +1) * sizeof(char));
+	lcs[lcs_len] = '\0';
+	int x = matx_max - 1;
+	int y = maty_max - 1;
+	int l = lcs_len;
+	while(x > 0 && y > 0) {
+		if(X[x-1] == Y[y-1]) {
+			lcs[l-1] = X[x-1];
+			x--; y--; l--;
+		} else if(matrix[x-1][y] > matrix[x][y-1]) {
+			x--;
+		} else {
+			y--;
+		}
+	}
+	return lcs;
 }
 
 int main(int argc, char **argv) {
@@ -185,6 +186,7 @@ int main(int argc, char **argv) {
 	// 	printf("%d-%d ", min, max);
 	// }
 
+	Y = inputInfo->Y;
 	int **matrix = allocArray(matx_max, maty_max);
 
 	int tabx_max = n_processors;
@@ -230,17 +232,21 @@ int main(int argc, char **argv) {
 				table[square->tabX][square->tabY + 1]++;
 			}
 		//}
-		// free(square);
-		// print(table, tabx_max, taby_max);
+		free(square);
+
+		
+		//print(table, tabx_max, taby_max);
 		// print(matrix, matx_max, maty_max);
-		// printf("\n");
+		//printf("\n");
 	}
 
 	// calc lcs
+
+	//print(matrix, matx_max, maty_max);
 	lcs_result = lcs(matrix, inputInfo->X, inputInfo->Y, matx_max, maty_max);
 	//printf("%d  %d\n", matx_max, maty_max);
-	//printf("%d\n", matrix[matx_max-1][maty_max-1]);
-	//printf("%s\n", lcs_result);
-	print(matrix, matx_max, maty_max);
+	printf("%d\n", matrix[matx_max-1][maty_max-1]);
+	printf("%s\n", lcs_result);
+	//print(matrix, matx_max, maty_max);
 	return 0;
 }
