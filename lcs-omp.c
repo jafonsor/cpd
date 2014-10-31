@@ -10,17 +10,7 @@ typedef short unsigned CellVal;
 #define max(a,b) (a > b)? a : b
 #define min(a,b) (a < b)? a : b
 
-/*
-CellVal max(CellVal a, CellVal b){
-	return (a > b)? a : b;
-}
-
-CellVal min(CellVal a, CellVal b){
-	return (a < b)? a : b;
-}
-*/
-
-// square
+// square. represents a block of the matrix
 typedef struct square {
 	int tabX;
 	int tabY;
@@ -29,8 +19,6 @@ typedef struct square {
 	int y_min;
 	int y_max;
 } Square;
-
-
 
 
 void cell_limits(int tab_coord, int max_tab_coord, int extra_remainder, int n_mat_coords_per_cell, int *coord_min, int *coord_max) {
@@ -56,7 +44,7 @@ void cell_limitY(int tab_coord, int max_tab_coord, int  *coord_min, int *coord_m
 	cell_limits(tab_coord, max_tab_coord, extra_remainderY, n_mat_coords_per_cellY, coord_min, coord_max);
 }
 
-
+// calculates the block limits based on the auxiliar table coordinates
 Square * new_square(int x, int y, int matx_max, int maty_max, int tabx_max, int taby_max) {
 	Square * new_square = (Square*)malloc(sizeof(Square));
 	new_square->tabX = x;
@@ -66,7 +54,7 @@ Square * new_square(int x, int y, int matx_max, int maty_max, int tabx_max, int 
 	return new_square;
 }
 
-// stack
+// stack. used to store the blocks that can be processed
 typedef struct stack {
 	Square ** squares;
 	int max_size;
@@ -80,6 +68,7 @@ Stack * new_stack(int max_size) {
 	result->cursor = 0;
 	result->current_size = 0;
 	result->squares = (Square**)malloc(sizeof(Square*)*max_size);
+	return result;
 }
 
 void delete_stack(Stack * stack) {
@@ -118,18 +107,8 @@ CellVal ** allocArray(int xdim, int ydim) {
 	return array;
 }
 
-void reverse(char * str) {
-	int len = strlen(str);
-	int i;
-	char tmp;
-	for(i = 0; i < len / 2; i++) {
-		tmp = str[i];
-		str[i] = str[len-1-i];
-		str[len-1-i] = tmp;
-	}
-}
-
-
+// Searches the auxiliar table for a value that is different from 3.
+// If all the values of the table are 3 then the computation is finished.
 int notFinishedTab(CellVal **table, int tabx_max, int taby_max) {
 	int i,j;
 	for(i = 0; i < tabx_max; i++) {
@@ -142,7 +121,7 @@ int notFinishedTab(CellVal **table, int tabx_max, int taby_max) {
 }
 
 
-// read input
+// InputInfo. Used to store the info present on the input file
 typedef struct file_info {
 	int size_x;
 	int size_y;
@@ -181,9 +160,7 @@ short cost(int x) {
 	return (short) (dcost / n_iter + 0.1);
 }
 
-//set(mat, x, y)
-
-
+// calculate the value for the matrix cell at (x,y)
 void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
 	if (x == 0 || y == 0)
 		matrix[x][y] = 0;    
@@ -193,6 +170,7 @@ void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
 		matrix[x][y] = max(matrix[x-1][y], matrix[x][y-1]);
 }
 
+// calculates the lcs based on the previeously filled matrix
 char * lcs(CellVal **matrix, char * X, char * Y, int matx_max, int maty_max) {
 	int lcs_len = matrix[matx_max-1][maty_max-1];
 	char * lcs = (char*)malloc((lcs_len +1) * sizeof(char));
@@ -231,20 +209,16 @@ int main(int argc, char **argv) {
 
 	int i,j;
 
-	CellVal **table;
-	int tabx_max, taby_max;
+
 	CellVal **matrix = allocArray(matx_max, maty_max);
 
 	// define the number of cells on the auxiliar matrix
-	int block_x_size = 20;
-	int block_y_size = 300;
-	tabx_max =  (matx_max > 150)? matx_max / block_x_size : matx_max / 5;
-	taby_max =  (maty_max > 150)? maty_max / block_y_size : maty_max / 5;
+	int block_x_size = (matx_max > 20)?   20 : matx_max / 5;
+	int block_y_size = (maty_max > 300)? 300 : maty_max / 5;
+	int tabx_max =  matx_max / block_x_size;
+	int taby_max =  maty_max / block_y_size;
 
-
-
-	// auxiliar table to s
-	table = allocArray(tabx_max, taby_max);
+	CellVal **table = allocArray(tabx_max, taby_max);
 
 	// initialize table: 1 for the sides, 2 for the 1st square, 0 for the rest
 	for(i = 0; i < tabx_max; i++) {
@@ -258,6 +232,7 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	// initialize the global vars that are used on the generation of new blocks
 	int remainderX         = matx_max % block_x_size;
 	int extra_per_cellX    = remainderX / tabx_max;
 	extra_remainderX       = remainderX % tabx_max;
@@ -268,37 +243,27 @@ int main(int argc, char **argv) {
 	extra_remainderY       = remainderY % taby_max;
 	n_mat_coords_per_cellY = block_y_size + extra_per_cellY;
 
-	int min_lim, max_lim;
-	for(i = 0; i < taby_max; i++) {
-		cell_limitY(i, taby_max, &min_lim, &max_lim);
-		printf("%d-%d ", min_lim, max_lim);
-	}
-	printf("\n");
-
+	// initialize the block stack with the first block to be processed
 	Stack * stack = new_stack(max(tabx_max, taby_max));
 	push(stack, new_square(0, 0, matx_max, maty_max, tabx_max, taby_max));
 	
-	Square * square = NULL;
+	Square * square = NULL; // holds the block for processing
 	CellVal x,y;
-	int n_processors;
 	int notFinished = 1; // false
-	int tid;
-	int parallel_counter = 0;
 
-#pragma omp parallel private(square, x, y, notFinished, tid)
+#pragma omp parallel private(square, x, y, notFinished)
 {	
-	tid = omp_get_thread_num();
 	notFinished = 1;
 	while(notFinished) {
 		square = NULL;
 
+		// wait for a block to process
 		while(square == NULL && notFinished) {
 			#pragma omp critical
 			{					
 				if(!empty(stack)) {
 					square = pop(stack);
 					table[square->tabX][square->tabY]++;
-					parallel_counter++;
 				}
 			}
 			if(square == NULL)
@@ -308,16 +273,16 @@ int main(int argc, char **argv) {
 		if(!notFinished)
 			break;
 
+		// process the block
 		for(x = square->x_min; x < square->x_max; x++) {
 			for(y = square->y_min; y < square->y_max; y++) {
 				calc(x,y, matrix, inputInfo->X, inputInfo->Y);
 			}
 		}
 
+		// update the auxiliar table and add to the stack the blocks that now can be processed
 		#pragma omp critical
 		{
-			//printf("%d - f\n", tid);
-			parallel_counter--;
 			if(square->tabX + 1 < tabx_max) {
 				table[square->tabX + 1][square->tabY]++;
 				if(table[square->tabX + 1][square->tabY] == 2) {
@@ -330,28 +295,18 @@ int main(int argc, char **argv) {
 					push(stack, new_square(square->tabX, square->tabY + 1, matx_max, maty_max, tabx_max, taby_max));
 				}
 			}
-			//printf("%d\n", tid );
-			//print(table, tabx_max, taby_max);
-			//printf("%d - %d\n", tid, parallel_counter);
-			//print(table, tabx_max, taby_max);
 		}
 
 		free(square);
 		notFinished = notFinishedTab(table, tabx_max, taby_max);
-
-		
-		//print(table, tabx_max, taby_max);
-		// print(matrix, matx_max, maty_max);
-		//printf("\n");
 	}
 }
-	// calc lcs
+	free(table);
+	delete_stack(stack);
 	
-	//print(matrix, matx_max, maty_max);
+	//
 	lcs_result = lcs(matrix, inputInfo->X, inputInfo->Y, matx_max, maty_max);
-	//printf("%d  %d\n", matx_max, maty_max);
 	printf("%d\n", matrix[matx_max-1][maty_max-1]);
 	printf("%s\n", lcs_result);
-	//print(matrix, matx_max, maty_max);
 	return 0;
 }
