@@ -181,6 +181,8 @@ short cost(int x) {
 	return (short) (dcost / n_iter + 0.1);
 }
 
+set(mat, x, y)
+
 
 void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
 	if (x == 0 || y == 0)
@@ -234,8 +236,8 @@ int main(int argc, char **argv) {
 	CellVal **matrix = allocArray(matx_max, maty_max);
 
 	// define the number of cells on the auxiliar matrix
-	int block_x_size = 10;
-	int block_y_size = 600;
+	int block_x_size = 20;
+	int block_y_size = 300;
 	tabx_max =  (matx_max > 150)? matx_max / block_x_size : matx_max / 5;
 	taby_max =  (maty_max > 150)? maty_max / block_y_size : maty_max / 5;
 
