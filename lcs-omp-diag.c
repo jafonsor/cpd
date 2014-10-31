@@ -107,12 +107,16 @@ int main(int argc, char **argv) {
 
 	int **matrix = allocArray(matx_max, maty_max);
 
-	int diagonal, i, j;
+	int diagonal, i, j, c, l;
+	int min_lim, max_lim, chunck;
 	for(diagonal = 0; diagonal < matx_max + maty_max - 1; diagonal++) {
-		#pragma parallel for private(i, c, l)
-		for( i = max(0, diagonal - matx_max + 1); i < min(diagonal+1, maty_max); i++) {
-			int c = i;
-			int l = diagonal - i;
+		min_lim = max(0, diagonal - matx_max + 1);
+		max_lim = min(diagonal+1, maty_max);
+		chunck = ((max_lim - min_lim) / 4);
+		#pragma omp parallel for private(i, c, l) schedule (guided , 5)
+		for( i = min_lim; i < max_lim; i++) {
+			c = i;
+			l = diagonal - i;
 			calc(l, c, matrix, inputInfo->X, inputInfo->Y);
 		}
 	}

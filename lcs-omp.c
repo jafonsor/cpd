@@ -5,6 +5,21 @@
 #include <time.h>
 #include <math.h>
 
+typedef short unsigned CellVal;
+
+#define max(a,b) (a > b)? a : b
+#define min(a,b) (a < b)? a : b
+
+/*
+CellVal max(CellVal a, CellVal b){
+	return (a > b)? a : b;
+}
+
+CellVal min(CellVal a, CellVal b){
+	return (a < b)? a : b;
+}
+*/
+
 // square
 typedef struct square {
 	int tabX;
@@ -15,22 +30,39 @@ typedef struct square {
 	int y_max;
 } Square;
 
-void cell_limits(int tab_coord, int max_mat_coord, int max_tab_coord, int  *coord_min, int *coord_max) {
-	int remainder = max_mat_coord % max_tab_coord;
-	int  n_mat_coords_per_cell = max_mat_coord / max_tab_coord;
-	*coord_min = n_mat_coords_per_cell * tab_coord;
-	*coord_max = (*coord_min) + n_mat_coords_per_cell;
+
+
+
+void cell_limits(int tab_coord, int max_tab_coord, int extra_remainder, int n_mat_coords_per_cell, int *coord_min, int *coord_max) {
+	int min = n_mat_coords_per_cell * tab_coord;
+	*coord_min = max(n_mat_coords_per_cell * tab_coord, 1);
+	*coord_max = min + n_mat_coords_per_cell;
 	if(tab_coord == max_tab_coord - 1) {
-		*coord_max += remainder;
+		*coord_max += extra_remainder;
 	}
 }
+
+int extra_remainderX;
+int n_mat_coords_per_cellX;
+
+void cell_limitX(int tab_coord, int max_tab_coord, int  *coord_min, int *coord_max) {
+	cell_limits(tab_coord, max_tab_coord, extra_remainderX, n_mat_coords_per_cellX, coord_min, coord_max);
+}
+
+int extra_remainderY;
+int n_mat_coords_per_cellY;
+
+void cell_limitY(int tab_coord, int max_tab_coord, int  *coord_min, int *coord_max) {
+	cell_limits(tab_coord, max_tab_coord, extra_remainderY, n_mat_coords_per_cellY, coord_min, coord_max);
+}
+
 
 Square * new_square(int x, int y, int matx_max, int maty_max, int tabx_max, int taby_max) {
 	Square * new_square = (Square*)malloc(sizeof(Square));
 	new_square->tabX = x;
 	new_square->tabY = y;
-	cell_limits(x,matx_max, tabx_max, &new_square->x_min, &new_square->x_max);
-	cell_limits(y,maty_max, taby_max, &new_square->y_min, &new_square->y_max);
+	cell_limitX(x, tabx_max, &new_square->x_min, &new_square->x_max);
+	cell_limitY(y, taby_max, &new_square->y_min, &new_square->y_max);
 	return new_square;
 }
 
@@ -76,18 +108,12 @@ int empty(Stack * stack) {
 	return !stack->current_size;
 }
 
-
-
-
-
-char * Y;
-
-int ** allocArray(int xdim, int ydim) {
-	int **array = (int**)malloc(sizeof(int*)*xdim);
+CellVal ** allocArray(int xdim, int ydim) {
+	short unsigned **array = (CellVal**)malloc(sizeof(CellVal*)*xdim);
 	int x;
 	for(x = 0; x < xdim; x++) {
-		array[x] = (int*)malloc(sizeof(int)*ydim);
-		memset(array[x], (unsigned char)0, sizeof(int) * ydim);
+		array[x] = (CellVal*)malloc(sizeof(CellVal)*ydim);
+		memset(array[x], 0, sizeof(CellVal) * ydim);
 	}
 	return array;
 }
@@ -103,33 +129,8 @@ void reverse(char * str) {
 	}
 }
 
-int max(int a, int b){
-	return (a > b)? a : b;
-}
 
-int min(int a, int b){
-	return (a < b)? a : b;
-}
-
-
-
-
-
-Square * squareWith2(int iniX, int iniY, int **table, int tabx_max, int taby_max, int matx_max, int maty_max) {
-	int diagonal, i, j;
-	for(diagonal = iniX+iniY; diagonal < tabx_max + taby_max - 1; diagonal++)
-		for( i = max(0, diagonal - tabx_max + 1); i < min(diagonal+1, taby_max); i++)
-		{
-			int c = i;
-			int l = diagonal - i;
-			if(table[l][c] == 2) {
-				return new_square(l, c, matx_max, maty_max, tabx_max, taby_max);
-			}
-		}
-	return NULL;
-}
-
-int notFinishedTab(int **table, int tabx_max, int taby_max) {
+int notFinishedTab(CellVal **table, int tabx_max, int taby_max) {
 	int i,j;
 	for(i = 0; i < tabx_max; i++) {
 		for(j = 0; j < taby_max; j++) {
@@ -138,19 +139,6 @@ int notFinishedTab(int **table, int tabx_max, int taby_max) {
 		}
 	}
 	return 0;
-}
-
-
-
-
-void print(int **m, int x_max, int y_max) {
-	int i, j;   
-	for(i = 0; i < x_max; i++) {
-		for(j = 0; j < y_max; j++) {
-			printf("%d ", m[i][j]);
-		}
-		printf("\n");
-	}
 }
 
 
@@ -194,7 +182,7 @@ short cost(int x) {
 }
 
 
-void calc(int x, int y, int **matrix, char * X, char * Y) {
+void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
 	if (x == 0 || y == 0)
 		matrix[x][y] = 0;    
 	else if (X[x-1] == Y[y-1])
@@ -203,7 +191,7 @@ void calc(int x, int y, int **matrix, char * X, char * Y) {
 		matrix[x][y] = max(matrix[x-1][y], matrix[x][y-1]);
 }
 
-char * lcs(int **matrix, char * X, char * Y, int matx_max, int maty_max) {
+char * lcs(CellVal **matrix, char * X, char * Y, int matx_max, int maty_max) {
 	int lcs_len = matrix[matx_max-1][maty_max-1];
 	char * lcs = (char*)malloc((lcs_len +1) * sizeof(char));
 	lcs[lcs_len] = '\0';
@@ -241,31 +229,22 @@ int main(int argc, char **argv) {
 
 	int i,j;
 
-	Y = inputInfo->Y;
-
-	int **table;
+	CellVal **table;
 	int tabx_max, taby_max;
-	int **matrix = allocArray(matx_max, maty_max);
+	CellVal **matrix = allocArray(matx_max, maty_max);
 
 	// define the number of cells on the auxiliar matrix
-	tabx_max =  (matx_max > 150)? matx_max / 150 : matx_max / 5;
-	taby_max =  (maty_max > 150)? maty_max / 150 : maty_max / 5;
+	int block_x_size = 10;
+	int block_y_size = 600;
+	tabx_max =  (matx_max > 150)? matx_max / block_x_size : matx_max / 5;
+	taby_max =  (maty_max > 150)? maty_max / block_y_size : maty_max / 5;
 
-	// check cell limits
-	// //cell_limits(int tab_coord, int max_mat_coord, int max_tab_coord, int  *coord_min, int *coord_max)
-	// int min, max;
-	// for(i = 0; i < tabx_max; i++) {
-	// 	cell_limits(i, inputInfo->size_x, tabx_max, &min, &max);
-	// 	printf("%d-%d ", min, max);
-	// }
-	// printf("\n");
-	// for(i = 0; i < taby_max; i++) {
-	// 	cell_limits(i, inputInfo->size_y, taby_max, &min, &max);
-	// 	printf("%d-%d ", min, max);
-	// }
 
+
+	// auxiliar table to s
 	table = allocArray(tabx_max, taby_max);
 
+	// initialize table: 1 for the sides, 2 for the 1st square, 0 for the rest
 	for(i = 0; i < tabx_max; i++) {
 		for(j = 0; j < taby_max; j++) {
 			if(i==0 && j==0)
@@ -277,37 +256,45 @@ int main(int argc, char **argv) {
 		}
 	}
 
+	int remainderX         = matx_max % block_x_size;
+	int extra_per_cellX    = remainderX / tabx_max;
+	extra_remainderX       = remainderX % tabx_max;
+	n_mat_coords_per_cellX = block_x_size + extra_per_cellX;
+
+	int remainderY         = maty_max % block_y_size;
+	int extra_per_cellY    = remainderY / taby_max;
+	extra_remainderY       = remainderY % taby_max;
+	n_mat_coords_per_cellY = block_y_size + extra_per_cellY;
+
+	int min_lim, max_lim;
+	for(i = 0; i < taby_max; i++) {
+		cell_limitY(i, taby_max, &min_lim, &max_lim);
+		printf("%d-%d ", min_lim, max_lim);
+	}
+	printf("\n");
+
 	Stack * stack = new_stack(max(tabx_max, taby_max));
 	push(stack, new_square(0, 0, matx_max, maty_max, tabx_max, taby_max));
-
-	// fill matrix
+	
 	Square * square = NULL;
-	int x,y;
+	CellVal x,y;
 	int n_processors;
 	int notFinished = 1; // false
 	int tid;
 	int parallel_counter = 0;
-	int last_tx, last_ty = 0;
 
-#pragma omp parallel private(square, x, y, notFinished, tid, last_tx, last_ty)
+#pragma omp parallel private(square, x, y, notFinished, tid)
 {	
 	tid = omp_get_thread_num();
 	notFinished = 1;
 	while(notFinished) {
 		square = NULL;
-		last_tx = 0;
-		last_ty = 0;
+
 		while(square == NULL && notFinished) {
 			#pragma omp critical
 			{					
-				//square = squareWith2(last_tx, last_ty, table, tabx_max, taby_max, matx_max, maty_max);
-				//last_tx = 0;
-				//last_ty = 0;
 				if(!empty(stack)) {
 					square = pop(stack);
-
-
-					//printf("%d -> [%d][%d]\n", tid, square->tabX, square->tabY );
 					table[square->tabX][square->tabY]++;
 					parallel_counter++;
 				}
@@ -319,8 +306,6 @@ int main(int argc, char **argv) {
 		if(!notFinished)
 			break;
 
-		last_tx = square->tabX;
-		last_ty = square->tabY;
 		for(x = square->x_min; x < square->x_max; x++) {
 			for(y = square->y_min; y < square->y_max; y++) {
 				calc(x,y, matrix, inputInfo->X, inputInfo->Y);
