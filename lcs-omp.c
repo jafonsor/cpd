@@ -224,6 +224,7 @@ char * lcs(int **matrix, char * X, char * Y, int matx_max, int maty_max) {
 }
 
 int main(int argc, char **argv) {
+	//printf("n_threads: %d\n", omp_get_num_threads());	
 
 	char * lcs_result = NULL;
 	InputInfo * inputInfo = NULL;
@@ -246,8 +247,9 @@ int main(int argc, char **argv) {
 	int tabx_max, taby_max;
 	int **matrix = allocArray(matx_max, maty_max);
 
-	tabx_max = matx_max / 150;
-	taby_max = maty_max / 150;
+	// define the number of cells on the auxiliar matrix
+	tabx_max =  (matx_max > 150)? matx_max / 150 : matx_max / 5;
+	taby_max =  (maty_max > 150)? maty_max / 150 : maty_max / 5;
 
 	// check cell limits
 	// //cell_limits(int tab_coord, int max_mat_coord, int max_tab_coord, int  *coord_min, int *coord_max)
