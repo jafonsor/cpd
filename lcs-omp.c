@@ -181,7 +181,7 @@ short cost(int x) {
 	return (short) (dcost / n_iter + 0.1);
 }
 
-set(mat, x, y)
+//set(mat, x, y)
 
 
 void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
