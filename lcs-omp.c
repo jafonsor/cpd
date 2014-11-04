@@ -98,11 +98,16 @@ int empty(Stack * stack) {
 }
 
 CellVal ** allocArray(int xdim, int ydim) {
-	short unsigned **array = (CellVal**)malloc(sizeof(CellVal*)*xdim);
+	// alloc all memory for the 2D array
+	CellVal *array_block = (CellVal*)malloc(sizeof(CellVal) * xdim * ydim);
+	memset(array_block, 0, sizeof(CellVal) * xdim * ydim);
+
+	// create a pointer array to the beginning of the lines
+	CellVal **array = (CellVal**)malloc(sizeof(CellVal*)*xdim);
+	
 	int x;
 	for(x = 0; x < xdim; x++) {
-		array[x] = (CellVal*)malloc(sizeof(CellVal)*ydim);
-		memset(array[x], 0, sizeof(CellVal) * ydim);
+		array[x] = &array_block[x * ydim];
 	}
 	return array;
 }
