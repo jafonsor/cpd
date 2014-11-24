@@ -10,3 +10,4 @@ serial
 *.mod.*
 omp-test
 public-instances
+lcs
