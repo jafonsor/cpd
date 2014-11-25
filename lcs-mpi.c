@@ -23,8 +23,8 @@ InputInfo * readInput(char * fileName) {
 	if((file = fopen(fileName,"r")) != NULL) {            
 		inputInfo = (InputInfo*)malloc(sizeof(InputInfo));
 		fscanf(file,"%d %d", &inputInfo->size_x, &inputInfo->size_y);
-		inputInfo->size_x++;
-		inputInfo->size_y++;
+		inputInfo->size_x;
+		inputInfo->size_y;
 		inputInfo->X = (char*)malloc((inputInfo->size_x+1)*sizeof(char));
 		inputInfo->Y = (char*)malloc((inputInfo->size_y+1)*sizeof(char)); 
 	
