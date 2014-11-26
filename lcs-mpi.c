@@ -8,71 +8,156 @@
 #define BLOCK_SIZE(id,p,n) (BLOCK_HIGH(id,p,n)-BLOCK_LOW(id,p,n)+1)
 #define BLOCK_OWNER(index,p,n) (((p)*((index)+1)-1)/(n))
 
+#define FATHER_TO_CHILDREN_TAG 1
+
+#define max(a,b) (a > b)? a : b
+
 // InputInfo. Used to store the info present on the input file
 typedef struct file_info {
-	int size_x;
-	int size_y;
-	char * X;
-	char * Y;
+  int size_x;
+  int size_y;
+  char * X;
+  char * Y;
 } InputInfo;
 
 InputInfo * readInput(char * fileName) {
-	FILE * file = NULL;
-	InputInfo * inputInfo = NULL;
-	
-	if((file = fopen(fileName,"r")) != NULL) {            
-		inputInfo = (InputInfo*)malloc(sizeof(InputInfo));
-		fscanf(file,"%d %d", &inputInfo->size_x, &inputInfo->size_y);
-		inputInfo->size_x;
-		inputInfo->size_y;
-		inputInfo->X = (char*)malloc((inputInfo->size_x+1)*sizeof(char));
-		inputInfo->Y = (char*)malloc((inputInfo->size_y+1)*sizeof(char)); 
-	
-		while((fscanf(file,"%s%s",inputInfo->X,inputInfo->Y)) != EOF) {
+  FILE * file = NULL;
+  InputInfo * inputInfo = NULL;
+  
+  if((file = fopen(fileName,"r")) != NULL) {            
+    inputInfo = (InputInfo*)malloc(sizeof(InputInfo));
+    fscanf(file,"%d %d", &inputInfo->size_x, &inputInfo->size_y);
+    inputInfo->size_x;
+    inputInfo->size_y;
+    inputInfo->X = (char*)malloc((inputInfo->size_x+1)*sizeof(char));
+    inputInfo->Y = (char*)malloc((inputInfo->size_y+1)*sizeof(char)); 
+  
+    while((fscanf(file,"%s%s",inputInfo->X,inputInfo->Y)) != EOF) {
 
-		}
-		fclose(file);
-	} else {
-		printf("cannot open file: %s", fileName);
-		exit(0);
-	}
-	return inputInfo;
+    }
+    fclose(file);
+  } else {
+    printf("cannot open file: %s", fileName);
+    exit(0);
+  }
+  return inputInfo;
 }
+
+// void print_x_part(char * x_part, int pid, int n_procs, int size_x) {
+//   char * x_part_out = (char*)malloc(sizeof(char)*(BLOCK_SIZE(pid, n_procs, inputInfo->size_x)+1));
+//   memcpy(x_part_out, x_part, BLOCK_SIZE(pid, n_procs, inputInfo->size_x));
+//   x_part_out[BLOCK_SIZE(pid, n_procs, inputInfo->size_x)] = '\0';
+// }
+
+typedef short unsigned CellVal;
+
+CellVal ** allocArray(int xdim, int ydim) {
+  // alloc all memory for the 2D array
+  CellVal *array_block = (CellVal*)malloc(sizeof(CellVal) * xdim * ydim);
+  memset(array_block, 0, sizeof(CellVal) * xdim * ydim);
+
+  // create a pointer array to the beginning of the lines
+  CellVal **array = (CellVal**)malloc(sizeof(CellVal*)*xdim);
+  
+  int x;
+  for(x = 0; x < xdim; x++) {
+    array[x] = &array_block[x * ydim];
+  }
+  return array;
+}
+
+// short cost(int x) {
+//   int i, n_iter = 20;
+//   double dcost = 0;
+//   for(i = 0; i < n_iter; i++)
+//   dcost += pow(sin((double) x),2) + pow(cos((double) x),2);
+//   return (short) (dcost / n_iter + 0.1);
+// }
+
+short cost(int x) { return 1; }
+
+// calculate the value for the matrix cell at (x,y)
+void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
+  if (x == 0 || y == 0)
+    //matrix[x][y] = 0;
+    printf("should not write on x == 0 nor on y == 0");
+  else if (X[x-1] == Y[y-1])
+    matrix[x][y] = matrix[x-1][y-1] + cost(y);
+  else
+    matrix[x][y] = max(matrix[x-1][y], matrix[x][y-1]);
+}
+
+void print(CellVal ** mat, int size_x, int size_y){
+  int i,j;
+
+  for (j=0; j<=size_x; j++){
+    for (i=0; i<=size_y; i++){
+      printf("%d ", mat[j][i]);
+    }
+    printf("\n");
+  }
+  fflush(stdout);
+} 
 
 
 int main(int argc, char *argv[]){
 
-  int n_procs, pid, i; 
+  int n_procs, rank, i; 
   char * lcs_result = NULL;
   InputInfo * inputInfo = NULL;
-  char * x_part;
+  char * x_part = NULL;
+  CellVal **mat_part = NULL;
   
   // read input
-	inputInfo = readInput(argv[1]);
-	if(inputInfo == NULL) {
-		printf("input info is NULL\n");
-		return -1;
-	}
+  inputInfo = readInput(argv[1]);
+  if(inputInfo == NULL) {
+    printf("input info is NULL\n");
+    return -1;
+  }
 
-	printf("%d\n", inputInfo->size_x);
   MPI_Init(&argc, &argv);
 
-	MPI_Comm_size(MPI_COMM_WORLD, &n_procs);
-	MPI_Comm_rank(MPI_COMM_WORLD, &pid);	
-	 
-	//MPI_Bcast(inputInfo->Y, inputInfo->size_y, MPI_CHAR, 0, MPI_COMM_WORLD);
-	x_part = &inputInfo->X[BLOCK_LOW(pid, n_procs, inputInfo->size_x)];
-	
-	char * x_part_out = (char*)malloc(sizeof(char)*(BLOCK_SIZE(pid, n_procs, inputInfo->size_x)+1));
-	memcpy(x_part_out, x_part, BLOCK_SIZE(pid, n_procs, inputInfo->size_x));
-	x_part_out[BLOCK_SIZE(pid, n_procs, inputInfo->size_x)] = '\0';
-	
-	printf("%d - %d, %d, %d\n", pid, n_procs, inputInfo->size_x); 
-	printf("%d - \ty:%s\n\tx:%d-%d-%d-%s\n",pid,inputInfo->Y, BLOCK_LOW(pid, n_procs, inputInfo->size_x),BLOCK_HIGH(pid, n_procs, inputInfo->size_x),BLOCK_SIZE(pid, n_procs, inputInfo->size_x), x_part_out);	
+  MPI_Comm_size(MPI_COMM_WORLD, &n_procs);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);  
+   
+  //MPI_Bcast(inputInfo->Y, inputInfo->size_y, MPI_CHAR, 0, MPI_COMM_WORLD);
+  int x_low  = BLOCK_LOW( rank, n_procs, inputInfo->size_x);
+  int x_size = BLOCK_SIZE(rank, n_procs, inputInfo->size_x);
+
+  x_part = &inputInfo->X[x_low];
+  mat_part = allocArray(x_size+1, inputInfo->size_y);
+  
+  // print_x_part(x_part, rank, n_procs, inputInfo->size_x);
+
+  MPI_Status status;
+  MPI_Request request;
+
+  if(rank != 0) {
+    MPI_Recv(mat_part[0],       inputInfo->size_y + 1, MPI_SHORT, (rank - 1), FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &status);
+  }
+
+  int x, y;
+  for(x = 1; x < x_size + 1; x++) {
+    for(y = 1; y < inputInfo->size_y + 1; y++) {
+      calc(x, y, mat_part, x_part, inputInfo->Y);
+    }
+  }
+
+  printf("id: %d\n", rank);
+  print(mat_part, x_size, inputInfo->size_y);
+
+  printf("id: %d - a\n", rank);
+  fflush(stdout);
+  if(rank != n_procs - 1) {
+    MPI_Isend(mat_part[x_size], inputInfo->size_y + 1, MPI_SHORT, rank + 1, FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &request);
+  }
+  printf("id: %d - b\n", rank);
+  fflush(stdout);
 
   MPI_Finalize();
 
-
+  printf("id: %d - c\n", rank);
+  fflush(stdout);
   return 0;
 
 }
