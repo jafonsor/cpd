@@ -8,7 +8,12 @@
 #define BLOCK_SIZE(id,p,n) (BLOCK_HIGH(id,p,n)-BLOCK_LOW(id,p,n)+1)
 #define BLOCK_OWNER(index,p,n) (((p)*((index)+1)-1)/(n))
 
-#define FATHER_TO_CHILDREN_TAG 1
+enum TAG {
+  FATHER_TO_CHILDREN_TAG, 
+  LCS_SIZE_TAG,
+  SUB_LCS_TAG,
+  CURRENT_Y_TAG
+};
 
 #define max(a,b) (a > b)? a : b
 
@@ -100,6 +105,43 @@ void print(CellVal ** mat, int size_x, int size_y){
 } 
 
 
+// sequence calc funcs
+typedef struct lcs_sub_result
+{
+  short unsigned last_y;
+  char *sub_lcs;
+  short  unsigned sub_lcs_size;
+} LcsSubResult;
+
+
+// calculates the lcs based on the previeously filled matrix
+LcsSubResult *  sub_lcs(CellVal ** mat_part, char * X, char *Y, int x_size, int current_y) {
+  char * lcs = (char*)malloc((x_size+1) * sizeof(char));
+  lcs[x_size] = '\0';
+  short unsigned x = x_size;
+  short unsigned y = current_y;
+  short unsigned l = x_size;
+  printf("y: %d\n",current_y);
+  while(x > 0 && y > 0) {
+    if(X[x-1] == Y[y-1]) {
+      lcs[l-1] = X[x-1];
+      x--; y--; l--;
+    } else if(mat_part[x-1][y] > mat_part[x][y-1]) {
+      x--;
+    } else {
+      y--;
+    }
+  }
+  LcsSubResult * result = (LcsSubResult*)malloc(sizeof(LcsSubResult));
+  printf("%d\n",y);
+  fflush(stdout);
+  result->last_y = y;
+  result->sub_lcs = &lcs[l];
+  result->sub_lcs_size = x_size - l;
+  return result;
+}
+
+
 int main(int argc, char *argv[]){
 
   int n_procs, rank, i; 
@@ -107,6 +149,7 @@ int main(int argc, char *argv[]){
   InputInfo * inputInfo = NULL;
   char * x_part = NULL;
   CellVal **mat_part = NULL;
+  LcsSubResult * subResult;
   
   // read input
   inputInfo = readInput(argv[1]);
@@ -125,7 +168,7 @@ int main(int argc, char *argv[]){
   int x_size = BLOCK_SIZE(rank, n_procs, inputInfo->size_x);
 
   x_part = &inputInfo->X[x_low];
-  mat_part = allocArray(x_size+1, inputInfo->size_y);
+  mat_part = allocArray(x_size+1, inputInfo->size_y + 1);
   
   // print_x_part(x_part, rank, n_procs, inputInfo->size_x);
 
@@ -153,6 +196,50 @@ int main(int argc, char *argv[]){
   }
   printf("id: %d - b\n", rank);
   fflush(stdout);
+
+  //-- calc sequence --
+  short unsigned lcs_total_size;
+  short unsigned last_y, current_y = inputInfo->size_y;
+  char * lcs_parts[n_procs-1]; // used by rank = 0 to store the sub parts of the sequence
+
+  if(rank==0){
+    // init squence part receiver
+    for(i = 1; i < n_procs; i++) {
+      lcs_parts[i-1] = (char*)malloc(sizeof(char)*(BLOCK_SIZE(i, n_procs, inputInfo->size_x)+1));
+    }
+    MPI_Recv(&lcs_total_size, 1, MPI_SHORT, n_procs-1, LCS_SIZE_TAG, MPI_COMM_WORLD, &status);  
+    for(i=n_procs-1; i > 0; i--)
+      MPI_Recv(lcs_parts[i-1], BLOCK_SIZE(i, n_procs, inputInfo->size_x)+1, MPI_CHAR, i, SUB_LCS_TAG, MPI_COMM_WORLD, &status);      
+  }
+
+  if(rank == n_procs-1) {
+    MPI_Isend(&mat_part[x_size][inputInfo->size_y], 1, MPI_SHORT, 0, LCS_SIZE_TAG, MPI_COMM_WORLD, &request);
+  }
+
+  if(rank != n_procs - 1) {
+    MPI_Recv(&current_y, 1, MPI_SHORT, rank+1, CURRENT_Y_TAG, MPI_COMM_WORLD, &status);
+  }
+
+  //calcular senquencia
+  subResult = sub_lcs(mat_part, x_part, inputInfo->Y, x_size, current_y);
+
+  printf("rank: %d, last_y: %d, sub_lcs_size: %d, sub_lcs: %s\n", rank, subResult->last_y, subResult->sub_lcs_size, subResult->sub_lcs);
+  fflush(stdout);
+  if(rank != 0) {
+    MPI_Isend(subResult->sub_lcs, subResult->sub_lcs_size + 1, MPI_CHAR, 0, SUB_LCS_TAG, MPI_COMM_WORLD, &request);
+    MPI_Isend(&subResult->last_y, 1, MPI_SHORT, rank - 1, CURRENT_Y_TAG, MPI_COMM_WORLD, &request);
+  } else {
+    printf("%d\n", lcs_total_size);
+    printf(subResult->sub_lcs);
+    for(i = 1; i < n_procs; i++) {
+      printf("%s", lcs_parts[i-1]);
+    }
+    printf("\n");
+    fflush(stdout);
+  }
+
+
+
 
   MPI_Finalize();
 
