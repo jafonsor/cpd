@@ -92,11 +92,13 @@ void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
     matrix[x][y] = max(matrix[x-1][y], matrix[x][y-1]);
 }
 
-void print(CellVal ** mat, int size_x, int size_y){
+void print(CellVal ** mat, int y_low, int size_x, int y_high){
   int i,j;
-
+  if(y_low == 1) {
+    y_low = 0;
+  }
   for (j=0; j<=size_x; j++){
-    for (i=0; i<=size_y; i++){
+    for (i=y_low; i<=y_high; i++){
       printf("%d ", mat[j][i]);
     }
     printf("\n");
@@ -175,27 +177,40 @@ int main(int argc, char *argv[]){
   MPI_Status status;
   MPI_Request request;
 
-  if(rank != 0) {
-    MPI_Recv(mat_part[0],       inputInfo->size_y + 1, MPI_SHORT, (rank - 1), FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &status);
-  }
+  int n_cols = 2;
+  int col_y_low, col_y_high,col_y_size,c;
 
-  int x, y;
-  for(x = 1; x < x_size + 1; x++) {
-    for(y = 1; y < inputInfo->size_y + 1; y++) {
-      calc(x, y, mat_part, x_part, inputInfo->Y);
+  for(c = 0; c < n_cols; c++){
+
+    col_y_low  = BLOCK_LOW( c, n_cols, inputInfo->size_y) +1;
+    col_y_size = BLOCK_SIZE(c, n_cols, inputInfo->size_y);
+    col_y_high = BLOCK_HIGH(c, n_cols, inputInfo->size_y) +1;
+
+
+    //-- fill matrix part --
+    if(rank != 0) {
+      MPI_Recv(&mat_part[0][col_y_low],    col_y_size, MPI_SHORT, (rank - 1), FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &status);
     }
-  }
 
-  printf("id: %d\n", rank);
-  print(mat_part, x_size, inputInfo->size_y);
+    printf("%d: col=%d, low=%d, high=%d\n", rank, c, col_y_low, col_y_high);
+    int x, y;
+    for(x = 1; x < x_size + 1; x++) {
+      for(y = col_y_low; y <= col_y_high; y++) {
+        calc(x, y, mat_part, x_part, inputInfo->Y);
+      }
+    }
 
-  printf("id: %d - a\n", rank);
-  fflush(stdout);
-  if(rank != n_procs - 1) {
-    MPI_Isend(mat_part[x_size], inputInfo->size_y + 1, MPI_SHORT, rank + 1, FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &request);
+    printf("id: %d\n", rank);
+    fflush(stdout);
+    print(mat_part, col_y_low, x_size, col_y_high);
+
+    printf("id: %d - a\n", rank);
+    if(rank != n_procs - 1) {
+      MPI_Isend(&mat_part[x_size][col_y_low], col_y_size, MPI_SHORT, rank + 1, FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &request);
+    }
+    printf("id: %d - b\n", rank);
+    fflush(stdout);
   }
-  printf("id: %d - b\n", rank);
-  fflush(stdout);
 
   //-- calc sequence --
   short unsigned lcs_total_size;
