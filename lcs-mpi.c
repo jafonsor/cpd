@@ -189,8 +189,6 @@ int main(int argc, char *argv[]) {
   // distribute the X parts to the other processes
   int x_part_low, x_part_size;
   if(rank == 0) {
-    printf("this is the right version!\n");
-    fflush(stdout);
     memcpy(x_part, inputInfo->X, x_size);
     for(i = 1; i < n_procs; i++) {
       x_part_low  = BLOCK_LOW( i, n_procs, inputInfo->size_x);
