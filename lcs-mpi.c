@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <mpi.h>
+#include <math.h>
 
 #define BLOCK_LOW(id,p,n) ((id)*(n)/(p))
 #define BLOCK_HIGH(id,p,n) (BLOCK_LOW((id)+1,p,n)-1)
@@ -12,7 +13,8 @@ enum TAG {
   FATHER_TO_CHILDREN_TAG, 
   LCS_SIZE_TAG,
   SUB_LCS_TAG,
-  CURRENT_Y_TAG
+  CURRENT_Y_TAG,
+  X_PART_TAG
 };
 
 #define max(a,b) (a > b)? a : b
@@ -71,15 +73,15 @@ CellVal ** allocArray(int xdim, int ydim) {
   return array;
 }
 
-// short cost(int x) {
-//   int i, n_iter = 20;
-//   double dcost = 0;
-//   for(i = 0; i < n_iter; i++)
-//   dcost += pow(sin((double) x),2) + pow(cos((double) x),2);
-//   return (short) (dcost / n_iter + 0.1);
-// }
+short cost(int x) {
+  int i, n_iter = 20;
+  double dcost = 0;
+  for(i = 0; i < n_iter; i++)
+  dcost += pow(sin((double) x),2) + pow(cos((double) x),2);
+  return (short) (dcost / n_iter + 0.1);
+}
 
-short cost(int x) { return 1; }
+//short cost(int x) { return 1; }
 
 // calculate the value for the matrix cell at (x,y)
 void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
@@ -123,7 +125,7 @@ LcsSubResult *  sub_lcs(CellVal ** mat_part, char * X, char *Y, int x_size, int 
   short unsigned x = x_size;
   short unsigned y = current_y;
   short unsigned l = x_size;
-  printf("y: %d\n",current_y);
+  //printf("y: %d\n",current_y);
   while(x > 0 && y > 0) {
     if(X[x-1] == Y[y-1]) {
       lcs[l-1] = X[x-1];
@@ -135,7 +137,7 @@ LcsSubResult *  sub_lcs(CellVal ** mat_part, char * X, char *Y, int x_size, int 
     }
   }
   LcsSubResult * result = (LcsSubResult*)malloc(sizeof(LcsSubResult));
-  printf("%d\n",y);
+  //printf("%d\n",y);
   fflush(stdout);
   result->last_y = y;
   result->sub_lcs = &lcs[l];
@@ -144,40 +146,76 @@ LcsSubResult *  sub_lcs(CellVal ** mat_part, char * X, char *Y, int x_size, int 
 }
 
 
-int main(int argc, char *argv[]){
-
+int main(int argc, char *argv[]) {
   int n_procs, rank, i; 
   char * lcs_result = NULL;
   InputInfo * inputInfo = NULL;
   char * x_part = NULL;
   CellVal **mat_part = NULL;
   LcsSubResult * subResult;
-  
-  // read input
-  inputInfo = readInput(argv[1]);
-  if(inputInfo == NULL) {
-    printf("input info is NULL\n");
-    return -1;
-  }
 
   MPI_Init(&argc, &argv);
 
   MPI_Comm_size(MPI_COMM_WORLD, &n_procs);
-  MPI_Comm_rank(MPI_COMM_WORLD, &rank);  
-   
-  //MPI_Bcast(inputInfo->Y, inputInfo->size_y, MPI_CHAR, 0, MPI_COMM_WORLD);
+  MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  if(rank == 0) {
+    // read input
+    inputInfo = readInput(argv[1]);
+    if(inputInfo == NULL) {
+      printf("input info is NULL\n");
+      return -1;
+    }
+  } else {
+    inputInfo = (InputInfo*)malloc(sizeof(InputInfo));
+  }
+
+  MPI_Bcast(&inputInfo->size_x, 1, MPI_INT, 0, MPI_COMM_WORLD);
+  MPI_Bcast(&inputInfo->size_y, 1, MPI_INT, 0, MPI_COMM_WORLD);
+
+  // initialize proc own info about its x sequence sub part
   int x_low  = BLOCK_LOW( rank, n_procs, inputInfo->size_x);
   int x_size = BLOCK_SIZE(rank, n_procs, inputInfo->size_x);
 
-  x_part = &inputInfo->X[x_low];
-  mat_part = allocArray(x_size+1, inputInfo->size_y + 1);
-  
-  // print_x_part(x_part, rank, n_procs, inputInfo->size_x);
+  x_part = (char*)malloc(sizeof(char)*x_size+1);
+  if(rank != 0) {
+    // alloc array on receiving processes of the Y sequence
+    inputInfo->Y = (char*)malloc(sizeof(char)*inputInfo->size_y);
+  }
 
   MPI_Status status;
   MPI_Request request;
 
-  int n_cols = 2;
+  // distribute the X parts to the other processes
+  int x_part_low, x_part_size;
+  if(rank == 0) {
+    printf("this is the right version!\n");
+    fflush(stdout);
+    memcpy(x_part, inputInfo->X, x_size);
+    for(i = 1; i < n_procs; i++) {
+      x_part_low  = BLOCK_LOW( i, n_procs, inputInfo->size_x);
+      x_part_size = BLOCK_SIZE(i, n_procs, inputInfo->size_x);
+      MPI_Isend(&inputInfo->X[x_part_low], x_part_size, MPI_CHAR, i, X_PART_TAG, MPI_COMM_WORLD, &request);
+    }
+  } else {
+    MPI_Recv(x_part, x_size, MPI_SHORT, 0, X_PART_TAG, MPI_COMM_WORLD, &status);
+  }
+
+  x_part[x_size] = '\0';
+
+  // broadcast the Y sequence
+  MPI_Bcast(  inputInfo->Y, inputInfo->size_y, MPI_CHAR, 0, MPI_COMM_WORLD);
+  // printf("%d: Y=%s\n", rank, inputInfo->Y);
+  // printf("%d: X=%s\n", rank, x_part);
+  // fflush(stdout);
+
+
+  mat_part = allocArray(x_size+1, inputInfo->size_y + 1);
+
+
+
+  int y_size = 1;
+  int n_cols = 1;//inputInfo->size_y / y_size;
   int col_y_low, col_y_high,col_y_size,c;
 
   for(c = 0; c < n_cols; c++){
@@ -186,30 +224,31 @@ int main(int argc, char *argv[]){
     col_y_size = BLOCK_SIZE(c, n_cols, inputInfo->size_y);
     col_y_high = BLOCK_HIGH(c, n_cols, inputInfo->size_y) +1;
 
-
     //-- fill matrix part --
     if(rank != 0) {
       MPI_Recv(&mat_part[0][col_y_low],    col_y_size, MPI_SHORT, (rank - 1), FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &status);
     }
 
-    printf("%d: col=%d, low=%d, high=%d\n", rank, c, col_y_low, col_y_high);
+    // printf("%d: col=%d, low=%d, high=%d\n", rank, c, col_y_low, col_y_high);
+    // fflush(stdout);
     int x, y;
+
     for(x = 1; x < x_size + 1; x++) {
       for(y = col_y_low; y <= col_y_high; y++) {
         calc(x, y, mat_part, x_part, inputInfo->Y);
       }
     }
 
-    printf("id: %d\n", rank);
-    fflush(stdout);
-    print(mat_part, col_y_low, x_size, col_y_high);
+    //printf("id: %d\n", rank);
+    //fflush(stdout);
+    //print(mat_part, col_y_low, x_size, col_y_high);
 
-    printf("id: %d - a\n", rank);
+    //printf("id: %d - a\n", rank);
     if(rank != n_procs - 1) {
       MPI_Isend(&mat_part[x_size][col_y_low], col_y_size, MPI_SHORT, rank + 1, FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &request);
     }
-    printf("id: %d - b\n", rank);
-    fflush(stdout);
+    //printf("id: %d - b\n", rank);
+    //fflush(stdout);
   }
 
   //-- calc sequence --
@@ -238,7 +277,7 @@ int main(int argc, char *argv[]){
   //calcular senquencia
   subResult = sub_lcs(mat_part, x_part, inputInfo->Y, x_size, current_y);
 
-  printf("rank: %d, last_y: %d, sub_lcs_size: %d, sub_lcs: %s\n", rank, subResult->last_y, subResult->sub_lcs_size, subResult->sub_lcs);
+  //printf("rank: %d, last_y: %d, sub_lcs_size: %d, sub_lcs: %s\n", rank, subResult->last_y, subResult->sub_lcs_size, subResult->sub_lcs);
   fflush(stdout);
   if(rank != 0) {
     MPI_Isend(subResult->sub_lcs, subResult->sub_lcs_size + 1, MPI_CHAR, 0, SUB_LCS_TAG, MPI_COMM_WORLD, &request);
@@ -253,12 +292,9 @@ int main(int argc, char *argv[]){
     fflush(stdout);
   }
 
-
-
-
   MPI_Finalize();
 
-  printf("id: %d - c\n", rank);
+  //printf("id: %d - c\n", rank);
   fflush(stdout);
   return 0;
 
