@@ -147,6 +147,7 @@ LcsSubResult *  sub_lcs(CellVal ** mat_part, char * X, char *Y, int x_size, int 
 
 
 int main(int argc, char *argv[]) {
+  double secs; // time of execution
   int n_procs, rank, i; 
   char * lcs_result = NULL;
   InputInfo * inputInfo = NULL;
@@ -158,6 +159,9 @@ int main(int argc, char *argv[]) {
 
   MPI_Comm_size(MPI_COMM_WORLD, &n_procs);
   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+
+  MPI_Barrier (MPI_COMM_WORLD);
+  secs = - MPI_Wtime();
 
   if(rank == 0) {
     // read input
@@ -288,6 +292,13 @@ int main(int argc, char *argv[]) {
     }
     printf("\n");
     fflush(stdout);
+  }
+
+  MPI_Barrier (MPI_COMM_WORLD);
+  secs += MPI_Wtime();
+
+  if(rank == 0) {
+    printf("time: %f\n", secs);
   }
 
   MPI_Finalize();
