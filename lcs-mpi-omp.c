@@ -61,12 +61,6 @@ InputInfo * readInput(char * fileName) {
     }
     fclose(file);
 
-    // keep the longest sequence on X to reduce comunication
-    if(inputInfo->size_x < inputInfo->size_y) {
-      SWAP(int, inputInfo->size_x, inputInfo->size_y);
-      SWAP(char*, inputInfo->X, inputInfo->Y);
-    }
-
   } else {
     printf("cannot open file: %s", fileName);
     exit(0);
