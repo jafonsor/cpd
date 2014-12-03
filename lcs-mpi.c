@@ -225,7 +225,7 @@ int main(int argc, char *argv[]) {
 
 
 
-  int y_size = 1000;
+  int y_size = 40;
   int n_cols = inputInfo->size_y / y_size;
   int col_y_low, col_y_high,col_y_size,c;
 
