@@ -9,8 +9,6 @@
 #define BLOCK_SIZE(id,p,n) (BLOCK_HIGH(id,p,n)-BLOCK_LOW(id,p,n)+1)
 #define BLOCK_OWNER(index,p,n) (((p)*((index)+1)-1)/(n))
 
-#define SWAP(T,a,b) {T t = a; a = b; b = t;}
-
 enum TAG {
   FATHER_TO_CHILDREN_TAG, 
   LCS_SIZE_TAG,
@@ -45,12 +43,6 @@ InputInfo * readInput(char * fileName) {
 
     }
     fclose(file);
-
-    // keep the longest sequence on X to reduce comunication
-    if(inputInfo->size_x < inputInfo->size_y) {
-      SWAP(int, inputInfo->size_x, inputInfo->size_y);
-      SWAP(char*, inputInfo->X, inputInfo->Y);
-    }
 
   } else {
     printf("cannot open file: %s", fileName);
