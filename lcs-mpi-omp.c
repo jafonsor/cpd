@@ -11,6 +11,20 @@
 
 #define SWAP(T,a,b) {T t = a; a = b; b = t;}
 
+#define STRINGIFY(a) #a
+#define DIAGONAL_ITERATION(width,height,fn) \
+  int diag, i, max_diag, min_diag; \
+  int n_diags = width + height - 1; \
+  for(diag = 1; diag <= n_diags; diag++) { \
+    max_diag = min(width,diag); \
+    min_diag = max(1, diag - height + 1); \
+    _Pragma(STRINGIFY(omp parallel for private(i))) \
+    for(i = min_diag; i <= max_diag; i++) { \
+      fn(i,-i + diag + 1); \
+    } \
+  }
+
+
 enum TAG {
   FATHER_TO_CHILDREN_TAG, 
   LCS_SIZE_TAG,
@@ -20,6 +34,7 @@ enum TAG {
 };
 
 #define max(a,b) (a > b)? a : b
+#define min(a,b) (a < b)? a : b
 
 // InputInfo. Used to store the info present on the input file
 typedef struct file_info {
@@ -225,7 +240,7 @@ int main(int argc, char *argv[]) {
 
 
 
-  int y_size = 1000;
+  int y_size = 40;
   int n_cols = inputInfo->size_y / y_size;
   int col_y_low, col_y_high,col_y_size,c;
 
@@ -244,11 +259,12 @@ int main(int argc, char *argv[]) {
     // fflush(stdout);
     int x, y;
 
-    for(x = 1; x < x_size + 1; x++) {
-      for(y = col_y_low; y <= col_y_high; y++) {
-        calc(x, y, mat_part, x_part, inputInfo->Y);
-      }
-    }
+    #define CALC_SAWP(x,y) calc(y,x, mat_part, x_part, inputInfo->Y)
+    printf("antes\n");
+    fflush(stdout);
+    DIAGONAL_ITERATION(col_y_high, x_size, CALC_SAWP);
+    printf("antes\n");
+    fflush(stdout);
 
     //printf("id: %d\n", rank);
     //fflush(stdout);
