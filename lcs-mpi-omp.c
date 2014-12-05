@@ -9,20 +9,10 @@
 #define BLOCK_SIZE(id,p,n) (BLOCK_HIGH(id,p,n)-BLOCK_LOW(id,p,n)+1)
 #define BLOCK_OWNER(index,p,n) (((p)*((index)+1)-1)/(n))
 
-#define SWAP(T,a,b) {T t = a; a = b; b = t;}
 
-#define STRINGIFY(a) #a
-#define DIAGONAL_ITERATION(width,height,fn) \
-  int diag, i, max_diag, min_diag; \
-  int n_diags = width + height - 1; \
-  for(diag = 1; diag <= n_diags; diag++) { \
-    max_diag = min(width,diag); \
-    min_diag = max(1, diag - height + 1); \
-    _Pragma(STRINGIFY(omp parallel for private(i))) \
-    for(i = min_diag; i <= max_diag; i++) { \
-      fn(i,-i + diag + 1); \
-    } \
-  }
+
+#define max(a,b) (a > b)? a : b
+#define min(a,b) (a < b)? a : b
 
 
 enum TAG {
@@ -33,8 +23,6 @@ enum TAG {
   X_PART_TAG
 };
 
-#define max(a,b) (a > b)? a : b
-#define min(a,b) (a < b)? a : b
 
 // InputInfo. Used to store the info present on the input file
 typedef struct file_info {
@@ -105,7 +93,7 @@ short cost(int x) {
 void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
   if (x == 0 || y == 0)
     //matrix[x][y] = 0;
-    printf("should not write on x == 0 nor on y == 0");
+    printf("warning! x or y = 0. (%d,%d)\n",x,y);
   else if (X[x-1] == Y[y-1])
     matrix[x][y] = matrix[x-1][y-1] + cost(y);
   else
@@ -137,7 +125,7 @@ typedef struct lcs_sub_result
 
 
 // calculates the lcs based on the previeously filled matrix
-LcsSubResult *  sub_lcs(CellVal ** mat_part, char * X, char *Y, int x_size, int current_y) {
+LcsSubResult * sub_lcs(CellVal ** mat_part, char * X, char *Y, int x_size, int current_y) {
   char * lcs = (char*)malloc((x_size+1) * sizeof(char));
   lcs[x_size] = '\0';
   short unsigned x = x_size;
@@ -234,10 +222,15 @@ int main(int argc, char *argv[]) {
 
 
 
-  int y_size = 40;
+  int y_size = (inputInfo->size_y > 40)? 40 :  inputInfo->size_y;
   int n_cols = inputInfo->size_y / y_size;
   int col_y_low, col_y_high,col_y_size,c;
 
+  omp_set_num_threads(2);
+
+  if(rank == 0)
+    printf("highest: %d\n", BLOCK_HIGH(n_cols-1, n_cols, inputInfo->size_y) +1);
+  int hassend = 0;
   for(c = 0; c < n_cols; c++){
 
     col_y_low  = BLOCK_LOW( c, n_cols, inputInfo->size_y) +1;
@@ -249,24 +242,46 @@ int main(int argc, char *argv[]) {
       MPI_Recv(&mat_part[0][col_y_low],    col_y_size, MPI_SHORT, (rank - 1), FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &status);
     }
 
-    // printf("%d: col=%d, low=%d, high=%d\n", rank, c, col_y_low, col_y_high);
+    // printf("%d: col=%d, low=%d, high=%d, size=%d\n", rank, c, col_y_low, col_y_high, col_y_size);
     // fflush(stdout);
     int x, y;
 
-    #define CALC_SAWP(x,y) calc(y,x, mat_part, x_part, inputInfo->Y)
-    printf("antes\n");
-    fflush(stdout);
-    DIAGONAL_ITERATION(col_y_high, x_size, CALC_SAWP);
-    printf("antes\n");
-    fflush(stdout);
+    int width  = col_y_size;
+    int height = x_size;
+    // printf("%d: width=%d, height=%d\n", rank, width, height);
+    // fflush(stdout);
+    int diag, i, max_diag, min_diag;
+    int n_diags = width + height - 1;
+    for(diag = 1; diag <= n_diags; diag++) {
+      max_diag = min(width,diag);
+      min_diag = max(1, diag - height + 1);
+      #pragma omp parallel for private(i)
+      for(i = min_diag; i <= max_diag; i++) {
+        x = i + col_y_low - 1;
+        y = diag - i + 1;
+        if(y > x_size || x > inputInfo->size_y) {
+          printf("%d: out of coords: %d,%d <= %d:%d\n", rank, y,x, x_size, inputInfo->size_y);
+          fflush(stdout);
+        }
+        calc(y, x, mat_part, x_part, inputInfo->Y);
+      }
+    }
+
+    for(x = 1; x < x_size + 1; x++) {
+      for(y = col_y_low; y <= col_y_high; y++) {
+        calc(x, y, mat_part, x_part, inputInfo->Y);
+      }
+    }
 
     //printf("id: %d\n", rank);
     //fflush(stdout);
     //print(mat_part, col_y_low, x_size, col_y_high);
-
-    //printf("id: %d - a\n", rank);
+    //fflush(stdout);
     if(rank != n_procs - 1) {
+      // if(hassend)
+      //   MPI_Wait(&request,MPI_STATUS_IGNORE);
       MPI_Isend(&mat_part[x_size][col_y_low], col_y_size, MPI_SHORT, rank + 1, FATHER_TO_CHILDREN_TAG, MPI_COMM_WORLD, &request);
+      hassend = 1;
     }
     //printf("id: %d - b\n", rank);
     //fflush(stdout);
@@ -305,7 +320,7 @@ int main(int argc, char *argv[]) {
     MPI_Isend(&subResult->last_y, 1, MPI_SHORT, rank - 1, CURRENT_Y_TAG, MPI_COMM_WORLD, &request);
   } else {
     printf("%d\n", lcs_total_size);
-    printf(subResult->sub_lcs);
+    printf("%s", subResult->sub_lcs);
     for(i = 1; i < n_procs; i++) {
       printf("%s", lcs_parts[i-1]);
     }
