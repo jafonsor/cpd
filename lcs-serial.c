@@ -6,9 +6,17 @@
 #include <time.h>
 #include <math.h>
 
-void imprimir(int size_line, int size_column, int **v);  
+typedef short unsigned CellVal;
 
-int max(int a, int b);
+#define max(a,b) (a > b)? a : b
+#define min(a,b) (a < b)? a : b
+
+typedef struct file_info {
+	int size_x;
+	int size_y;
+	char * X;
+	char * Y;
+} InputInfo;
 
 short cost(int x) {
 	int i, n_iter = 20;
@@ -30,110 +38,102 @@ void reverse(char * str) {
 	}
 }
 
+CellVal ** allocArray(int xdim, int ydim) {
+	// alloc all memory for the 2D array
+	CellVal *array_block = (CellVal*)malloc(sizeof(CellVal) * xdim * ydim);
+	memset(array_block, 0, sizeof(CellVal) * xdim * ydim);
 
-int **allocate_matrix_lcs(int size_line, int size_column){ 
- 
- int **array = (int**)malloc(sizeof(int*)*size_line);
+	// create a pointer array to the beginning of the lines
+	CellVal **array = (CellVal**)malloc(sizeof(CellVal*)*xdim);
+	
 	int x;
-	for(x = 0; x < size_line; x++) {
-		array[x] = (int*)malloc(sizeof(int)*size_column);		
+	for(x = 0; x < xdim; x++) {
+		array[x] = &array_block[x * ydim];
 	}
-	return array; 
+	return array;
 }
 
-
-
-int lcs_size(char *X, char *Y, int size_x, int size_y,char * lcs, int **C)
-{
-   int i,j;
-      
-   // fill matrix;  
-    for (i=0; i<size_x; i++){
-        for (j=0; j<size_y; j++){
-	        if (i == 0 || j == 0)
-	  	        C[i][j] = 0;    
-	        else if ((i>0 && j>0)&&(X[i-1] == Y[j-1]))
-	  	        C[i][j] = C[i-1][j-1] + cost(j);
-	        else if ((i>0 && j>0)&&(C[i-1][j] != C[i][j-1]))
-	  	        C[i][j] = max(C[i-1][j], C[i][j-1]);	  
-	        else
-	    	    C[i][j] = C[i][j-1]; 
-	    }    	 
-    }    
-   return C[size_x-1][size_y-1];
-}
- 
-
-int max(int a, int b){
-    return (a > b)? a : b;
+// calculate the value for the matrix cell at (x,y)
+void calc(int x, int y, CellVal **matrix, char * X, char * Y) {
+	if (x == 0 || y == 0)
+		matrix[x][y] = 0;    
+	else if (X[x-1] == Y[y-1])
+		matrix[x][y] = matrix[x-1][y-1] + cost(y);
+	else
+		matrix[x][y] = max(matrix[x-1][y], matrix[x][y-1]);
 }
 
+// calculates the lcs based on the previeously filled matrix
+char * lcs(CellVal **matrix, char * X, char * Y, int matx_max, int maty_max) {
+	int lcs_len = matrix[matx_max-1][maty_max-1];
+	char * lcs = (char*)malloc((lcs_len +1) * sizeof(char));
+	lcs[lcs_len] = '\0';
+	int x = matx_max - 1;
+	int y = maty_max - 1;
+	int l = lcs_len;
+	while(x > 0 && y > 0) {
+		if(X[x-1] == Y[y-1]) {
+			lcs[l-1] = X[x-1];
+			x--; y--; l--;
+		} else if(matrix[x-1][y] > matrix[x][y-1]) {
+			x--;
+		} else {
+			y--;
+		}
+	}
+	return lcs;
+}
 
-void lcs_max(char *X, char *Y, int size_x, int size_y, char * lcs, int **C){
+InputInfo * readInput(char * fileName) {
+	FILE * file = NULL;
+	InputInfo * inputInfo = NULL;
 	
-	int k,p,l;
+	if((file = fopen(fileName,"r")) != NULL) {            
+		inputInfo = (InputInfo*)malloc(sizeof(InputInfo));
+		fscanf(file,"%d %d", &inputInfo->size_x, &inputInfo->size_y);
+		inputInfo->size_x++;
+		inputInfo->size_y++;
+		inputInfo->X = (char*)malloc((inputInfo->size_x+1)*sizeof(char));
+		inputInfo->Y = (char*)malloc((inputInfo->size_y+1)*sizeof(char)); 
 	
-	// calc lcs
-    k = size_x-1; 
-	p = size_y-1;	
-	l = 0;
-    while (k>0 && p>0){
-		if (X[k-1] == Y[p-1]){
-        	lcs[l] = X[k-1]; 
-		  	k--; p--; l++;		 		                
-		} else if(C[k-1][p] >= C[k][p-1]) 
-        	k--;
-		else 
-			p--;
-   }
-   lcs[l] = '\0';
-   
-   //call fuction
-   reverse(lcs);
+		while((fscanf(file,"%s%s",inputInfo->X,inputInfo->Y)) != EOF) {
+
+		}
+		fclose(file);
+	} else {
+		printf("cannot open file: %s", fileName);
+		exit(0);
+	}
+	return inputInfo;
 }
-
-void imprimir(int size_line, int size_column, int **v){
-  
-  int i=0,j=0;
-  printf("\n\n");
-  for (i=0; i<size_line; i++){
-    for (j=0; j<size_column; j++){
-	  printf("%d ", v[i][j]);
-    }
-    printf("\n");
-  } 
-} 
-
 
 int main(int argc, char *argv[]){ 
 
-   FILE *file = NULL;
-   int size_line=0, size_column=0;	
-   char *s_X, *s_Y;
-   char *s_Max;
-   int ** matrix_lcs;
+   char * lcs_result = NULL;
+   InputInfo * inputInfo = NULL;
+   CellVal x,y;
+   
+   	// read input
+	inputInfo = readInput(argv[1]);
+	if(inputInfo == NULL) {
+		printf("input info is NULL\n");
+		return -1;
+	} 
+
+	int matx_max = inputInfo->size_x;
+    int maty_max = inputInfo->size_y;    
+    CellVal **matrix = allocArray(matx_max, maty_max);
     
-   if((file = fopen(argv[1],"r")) != NULL){        	
-    
-	fscanf(file,"%d %d",&size_line,&size_column);	
-	s_X = (char*)malloc(size_line*sizeof(char));	
-	s_Y = (char*)malloc(size_column*sizeof(char));	
-    s_Max = (char*)malloc(max(size_line,size_column) * sizeof(char));    
-    matrix_lcs = allocate_matrix_lcs(size_line,size_column);
+   	for(x = 0; x < matx_max; x++) {
+	   for(y = 0; y < maty_max; y++) {
+		   calc(x,y, matrix, inputInfo->X, inputInfo->Y);
+	   }
+	}   
+   
+    lcs_result = lcs(matrix, inputInfo->X, inputInfo->Y, matx_max, maty_max);
+    printf("%d\n", matrix[matx_max-1][maty_max-1]);
+    printf("%s\n", lcs_result);     		              
          
-	while((fscanf(file,"%s%s",s_X,s_Y)) != EOF){
-              
-	}	
-		
-	//size sequence
-    printf("%d\n", lcs_size(s_X,s_Y,size_line,size_column,s_Max,matrix_lcs)); 
-	 
-	lcs_max(s_X,s_Y,size_line,size_column,s_Max,matrix_lcs);
-	 
-    //sequence
-    printf("%s\n",s_Max); 
-          		              
-         
-  } 
+   
   return 0;
 }
